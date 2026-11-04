@@ -20,7 +20,7 @@ Linkuri: `.../kano/` și `.../afinitate/`. Zona formatorului: adăugați `?prof`
 ## Utilizare la curs
 - **Formator:** `.../kano/?prof` → „Creează sesiunea” → copiați linkul pentru participanți în chatul Zoom/Teams. Linkul cu `admin=…` este cheia de administrare: păstrați-l.
 - **Kano:** bifați „Chestionar deschis”; rezultatele se calculează live. Opțional: „Colectez propuneri de atribute” înainte, „Arată rezultatele participanților” la final. Export CSV pentru Excel.
-- **Afinitate:** etapa 1 – toți scriu idei; etapa 2 – fiecare își alege echipa (aceeași ca în breakout room) și grupează pe tabla echipei; etapa 3 – comparație între echipe + export CSV.
+- **Afinitate (studiul de caz cu conferința internațională, preîncărcat):** 1) participanții intră cu numele, „în comitetul de organizare”; 2) porniți cronometrul (implicit 5 min) – fiecare își vede doar propriile idei, iar dumneavoastră vedeți cine nu a scris încă nimic; 3) la expirare, toate ideile apar deodată pe o singură tablă și grupul întreg le grupează pe categorii; 4) rezultat + export CSV.
 
 ## De știut
 - Securitate minimă, potrivită pentru exerciții la curs: oricine are codul sesiunii poate scrie în ea; tokenul de admin doar ascunde comenzile din interfață. Nu colectați date sensibile.

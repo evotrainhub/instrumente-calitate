@@ -114,7 +114,15 @@ th{font-size:.8rem;text-transform:uppercase;letter-spacing:.04em;color:var(--mut
 // Pentru utilizare reală cu participanții: lipiți aici configurația proiectului Firebase
 // (Firebase Console → Project settings → Your apps → Web app → firebaseConfig).
 // Lăsat null → MOD DEMO: funcționează doar între taburile aceluiași browser (pentru testare).
-const FIREBASE_CONFIG = null;
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBQstRJQTo3wgBo6M720GR65NnqXbDPsGw",
+  authDomain: "instrumente-curs-smc.firebaseapp.com",
+  databaseURL: "https://instrumente-curs-smc-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "instrumente-curs-smc",
+  storageBucket: "instrumente-curs-smc.firebasestorage.app",
+  messagingSenderId: "673990668693",
+  appId: "1:673990668693:web:167c496ca2bb36a716869c"
+};
 /* Exemplu:
 const FIREBASE_CONFIG = {
   apiKey: "AIza...",
@@ -130,6 +138,7 @@ function createStore(prefix) {
     if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
     const db = firebase.database();
     const P = p => prefix + '/' + p;
+    let offset = 0; db.ref('.info/serverTimeOffset').on('value', s => { offset = s.val() || 0; });
     return {
       mode: 'firebase',
       on(path, cb) { const r = db.ref(P(path)); const h = s => cb(s.val()); r.on('value', h); return () => r.off('value', h); },
@@ -138,7 +147,8 @@ function createStore(prefix) {
       update(path, obj) { return db.ref(P(path)).update(obj); },
       remove(path) { return db.ref(P(path)).remove(); },
       newKey() { return db.ref().push().key; },
-      onConnection(cb) { db.ref('.info/connected').on('value', s => cb(!!s.val())); }
+      onConnection(cb) { db.ref('.info/connected').on('value', s => cb(!!s.val())); },
+      now() { return Date.now() + offset; }
     };
   }
   // ---------- mod demo: localStorage + evenimentul 'storage' între taburi ----------
@@ -165,7 +175,8 @@ function createStore(prefix) {
     update(path, obj) { let db = read(); for (const k of Object.keys(obj)) db = setAt(db, path + '/' + k, obj[k]); write(db); return Promise.resolve(); },
     remove(path) { write(setAt(read(), path, null)); return Promise.resolve(); },
     newKey() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); },
-    onConnection(cb) { cb(true); }
+    onConnection(cb) { cb(true); },
+    now() { return Date.now(); }
   };
 }
 

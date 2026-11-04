@@ -119,6 +119,10 @@ th{font-size:.8rem;text-transform:uppercase;letter-spacing:.04em;color:var(--mut
 .hint{background:linear-gradient(120deg,#ece8ff,#ffe4f1);border-radius:10px;padding:10px 14px;font-size:.9rem}
 .members{display:flex;gap:6px;flex-wrap:wrap}
 .members span{font-size:.78rem;background:#fff;border:1px solid var(--line);border-radius:999px;padding:2px 9px}
+.countdown{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:2.6rem;font-weight:800;line-height:1.1;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;font-variant-numeric:tabular-nums}
+.countdown.urgent{background:none;color:#ef4444;animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.45}}
+.case h1{font-size:1.35rem}
 @media (max-width:760px){.board{grid-template-columns:1fr}.col.unplaced{position:static;max-height:none}}
 </style>
 </head>
@@ -136,7 +140,15 @@ th{font-size:.8rem;text-transform:uppercase;letter-spacing:.04em;color:var(--mut
 // Pentru utilizare reală cu participanții: lipiți aici configurația proiectului Firebase
 // (Firebase Console → Project settings → Your apps → Web app → firebaseConfig).
 // Lăsat null → MOD DEMO: funcționează doar între taburile aceluiași browser (pentru testare).
-const FIREBASE_CONFIG = null;
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBQstRJQTo3wgBo6M720GR65NnqXbDPsGw",
+  authDomain: "instrumente-curs-smc.firebaseapp.com",
+  databaseURL: "https://instrumente-curs-smc-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "instrumente-curs-smc",
+  storageBucket: "instrumente-curs-smc.firebasestorage.app",
+  messagingSenderId: "673990668693",
+  appId: "1:673990668693:web:167c496ca2bb36a716869c"
+};
 /* Exemplu:
 const FIREBASE_CONFIG = {
   apiKey: "AIza...",
@@ -152,6 +164,7 @@ function createStore(prefix) {
     if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
     const db = firebase.database();
     const P = p => prefix + '/' + p;
+    let offset = 0; db.ref('.info/serverTimeOffset').on('value', s => { offset = s.val() || 0; });
     return {
       mode: 'firebase',
       on(path, cb) { const r = db.ref(P(path)); const h = s => cb(s.val()); r.on('value', h); return () => r.off('value', h); },
@@ -160,7 +173,8 @@ function createStore(prefix) {
       update(path, obj) { return db.ref(P(path)).update(obj); },
       remove(path) { return db.ref(P(path)).remove(); },
       newKey() { return db.ref().push().key; },
-      onConnection(cb) { db.ref('.info/connected').on('value', s => cb(!!s.val())); }
+      onConnection(cb) { db.ref('.info/connected').on('value', s => cb(!!s.val())); },
+      now() { return Date.now() + offset; }
     };
   }
   // ---------- mod demo: localStorage + evenimentul 'storage' între taburi ----------
@@ -187,7 +201,8 @@ function createStore(prefix) {
     update(path, obj) { let db = read(); for (const k of Object.keys(obj)) db = setAt(db, path + '/' + k, obj[k]); write(db); return Promise.resolve(); },
     remove(path) { write(setAt(read(), path, null)); return Promise.resolve(); },
     newKey() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); },
-    onConnection(cb) { cb(true); }
+    onConnection(cb) { cb(true); },
+    now() { return Date.now(); }
   };
 }
 
@@ -229,49 +244,63 @@ const debounce = (fn, ms) => { let h; return (...a) => { clearTimeout(h); h = se
 
 
 const COLORS = ['#5b3df5', '#e5368f', '#f59e0b', '#10b981', '#0ea5e9', '#ef4444', '#a855f7', '#14b8a6', '#f97316', '#2563eb'];
-// culori vii pentru bilețele, alese după autor
 const NOTE_COLORS = [['#fff3a3', '#f2d94a'], ['#ffd1e8', '#f59ac8'], ['#c9f7e1', '#7fdcb4'], ['#cfe8ff', '#8cc4f7'], ['#ffdcc2', '#f7ab78'], ['#e4d9ff', '#b9a2f7']];
 const noteColor = by => { let h = 0; for (const ch of String(by || '')) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return NOTE_COLORS[h % NOTE_COLORS.length]; };
-const PHASES = [['idei', 'Generare idei'], ['grupare', 'Grupare pe afinități'], ['final', 'Rezultat']];
+const PHASES = [['pregatire', 'Pregătire'], ['idei', 'Scriere individuală'], ['grupare', 'Grupare împreună'], ['final', 'Rezultat']];
+const PRESET_TOPIC = 'Organizarea conferinței internaționale „Transformarea digitală și sustenabilitatea în producție”';
+const PRESET_DESC = 'Sunteți membri ai comitetului de organizare al conferinței internaționale „Transformarea digitală și sustenabilitatea în producție”, care va avea loc la Romexpo, vineri–duminică, 11–13 decembrie 2026.\nNotați toate aspectele de care trebuie să ținem cont pentru o bună organizare a conferinței – câte un aspect pe bilețel. Fiecare scrie cel puțin o idee.';
+const BOARD = 't1';
+
 const store = createStore('afinitate');
 const code = (params.get('s') || '').toUpperCase().trim();
 const adminToken = params.get('admin');
-let S = null, isAdmin = false;
-let adminTab = lsGet('af_tab', 'idei'), adminTeam = 't1';
-let viewTeam = null;          // participant: echipa vizualizată în etapa finală
-let dragging = false, pending = false, selected = null;
+let S = null, isAdmin = false, showTexts = false;
+let dragging = false, pending = false, selected = null, lastPhase = null;
 const seen = new Set(); let firstPaint = true;
 
 $('#modeBadge').innerHTML = store.mode === 'demo'
-  ? '<span class="badge demo" title="Fără Firebase: datele se sincronizează doar între taburile acestui browser">Mod demo local</span>'
+  ? '<span class="badge demo" title="Fără Firebase: datele se sincronizează doar între taburile acestui browser">Mod demo local – participanții NU se pot conecta</span>'
   : '<span class="badge" id="conn">● conectat</span>';
 if (store.mode === 'firebase') store.onConnection(ok => { const c = $('#conn'); if (c) { c.textContent = ok ? '● conectat' : '○ reconectare…'; c.className = ok ? 'badge' : 'badge demo'; } });
 
 const P = p => 'sessions/' + code + (p ? '/' + p : '');
 const ideasList = () => Object.entries(S.ideas || {}).map(([id, x]) => ({ id, ...x })).sort((a, b) => (a.at || 0) - (b.at || 0));
-const teamIds = () => Array.from({ length: Math.max(1, S.meta.teams || 1) }, (_, i) => 't' + (i + 1));
-const teamName = t => (S.meta.teams || 1) > 1 ? 'Echipa ' + t.slice(1) : 'Tot grupul';
-const members = () => Object.entries(S.members || {}).map(([id, m]) => ({ id, ...m }));
-const myMember = () => (S.members || {})[clientId];
-const myTeam = () => (S.meta.teams || 1) <= 1 ? 't1' : (myMember() && myMember().team);
-const groupsOf = t => Object.entries(((S.boards || {})[t] || {}).groups || {}).map(([id, g]) => ({ id, ...g })).sort((a, b) => (a.order || 0) - (b.order || 0));
-const placeOf = t => (((S.boards || {})[t] || {}).place) || {};
+const members = () => Object.entries(S.members || {}).map(([id, m]) => ({ id, ...m })).sort((a, b) => (a.at || 0) - (b.at || 0));
+const me = () => (S.members || {})[clientId];
+const groups = () => Object.entries(((S.boards || {})[BOARD] || {}).groups || {}).map(([id, g]) => ({ id, ...g })).sort((a, b) => (a.order || 0) - (b.order || 0));
+const place = () => (((S.boards || {})[BOARD] || {}).place) || {};
+const remaining = () => S.meta.timerEnd ? Math.max(0, S.meta.timerEnd - store.now()) : 0;
+// Etapa efectivă: când cronometrul expiră, ideile devin vizibile pentru toți chiar dacă formatorul nu a apăsat nimic
+const phase = () => { const p = S.meta.phase || 'pregatire'; return (p === 'idei' && S.meta.timerEnd && remaining() <= 0) ? 'grupare' : p; };
+const fmtTime = ms => { const s = Math.ceil(ms / 1000), m = Math.floor(s / 60); return m + ':' + String(s % 60).padStart(2, '0'); };
 
 function render() {
   if (dragging) { pending = true; return; }
+  lastPhase = phase();
   preserveFocus(() => isAdmin ? renderAdmin() : renderParticipant());
   firstPaint = false;
+  tick();
 }
+
+// cronometrul: actualizează afișajul și trece automat la grupare la expirare
+function tick() {
+  if (!S || !S.meta) return;
+  const r = remaining();
+  $$('.countdown').forEach(el => { el.textContent = fmtTime(r); el.classList.toggle('urgent', r > 0 && r <= 30000); });
+  if (phase() !== lastPhase) render();
+  if (isAdmin && S.meta.phase === 'idei' && S.meta.timerEnd && r <= 0) store.update(P('meta'), { phase: 'grupare' });
+}
+setInterval(tick, 500);
 
 // ================= RUTARE =================
 if (params.has('prof')) renderDashboard();
 else if (code) {
   store.on(P(''), val => {
     S = val;
-    if (!S || !S.meta) { $('#app').innerHTML = `<div class="hero"><div class="card"><h2>Sesiune inexistentă</h2><p class="muted">Codul <b>${esc(code)}</b> nu corespunde niciunei sesiuni.</p><a class="btn" href="${baseUrl()}">Înapoi</a></div></div>`; return; }
+    if (!S || !S.meta) { $('#app').innerHTML = `<div class="hero"><div class="card"><h2>Sesiune inexistentă</h2><p class="muted">Codul <b>${esc(code)}</b> nu corespunde niciunei sesiuni.${store.mode === 'demo' ? ' Aplicația rulează în mod demo, deci vede doar sesiunile create în acest browser.' : ''}</p><a class="btn" href="${baseUrl()}">Înapoi</a></div></div>`; return; }
     isAdmin = !!adminToken && adminToken === S.meta.token;
     $('#sessTitle').textContent = S.meta.topic || '';
-    document.title = (S.meta.topic || 'Afinitate') + ' – Diagrama afinității';
+    document.title = 'Diagrama afinității – ' + code;
     render();
   });
 } else renderLanding();
@@ -286,12 +315,13 @@ function renderLanding() {
 
 function renderDashboard() {
   const mine = lsGet('af_my', []);
-  $('#app').innerHTML = `<div class="grid2">
+  $('#app').innerHTML = `${store.mode === 'demo' ? `<div class="card" style="margin-bottom:16px;border-color:#f2c94c;background:#fffbea"><b>Atenție: mod demo.</b> Configurația Firebase nu este completată în fișier, așa că participanții de pe alte calculatoare nu se pot conecta. Puteți testa deschizând linkul participantului în alte taburi ale acestui browser.</div>` : ''}
+  <div class="grid2">
     <div class="card stack"><h2>Sesiune nouă</h2>
-      <div><label for="nt">Tema / întrebarea de lucru</label><input type="text" id="nt" placeholder="ex. De ce nu sunt respectate procedurile SMC în organizație?"></div>
-      <div><label for="nd">Indicații pentru participanți (opțional)</label><textarea id="nd">Scrieți câte o idee pe bilețel: scurt, concret, maximum 1–2 rânduri. Puteți adăuga oricâte idei.</textarea></div>
-      <div class="row"><div style="flex:1"><label for="nn">Număr de echipe la grupare</label><select id="nn">${[1, 2, 3, 4, 5, 6, 7, 8].map(n => `<option value="${n}" ${n === 3 ? 'selected' : ''}>${n === 1 ? '1 – tot grupul pe aceeași tablă' : n + ' echipe'}</option>`).join('')}</select></div>
-      <label class="switch" style="margin-top:18px"><input type="checkbox" id="na"> Afișez autorul ideilor</label></div>
+      <div><label for="nt">Tema</label><input type="text" id="nt" value="${esc(PRESET_TOPIC)}"></div>
+      <div><label for="nd">Studiul de caz / indicații pentru participanți</label><textarea id="nd" rows="6">${esc(PRESET_DESC)}</textarea></div>
+      <div class="row"><div style="flex:1"><label for="nm">Timp de scriere individuală</label><select id="nm">${[2, 3, 4, 5, 7, 10].map(n => `<option value="${n}" ${n === 5 ? 'selected' : ''}>${n} minute</option>`).join('')}</select></div>
+      <label class="switch" style="margin-top:18px"><input type="checkbox" id="na"> Afișez autorul pe bilețele</label></div>
       <button class="primary" id="create">Creează sesiunea</button></div>
     <div class="card"><h2>Sesiunile mele</h2>
       ${mine.length ? `<table><tbody>${mine.slice().reverse().map(m => `<tr><td><b>${esc(m.title)}</b><div class="small muted">${new Date(m.at).toLocaleString('ro-RO')}</div></td><td class="num"><span class="codebox" style="font-size:1rem">${esc(m.code)}</span></td><td class="num"><a class="btn" href="?s=${m.code}&admin=${m.token}">Deschide</a></td></tr>`).join('')}</tbody></table>` : '<div class="empty">Nicio sesiune încă pe acest browser.</div>'}
@@ -299,13 +329,15 @@ function renderDashboard() {
   $('#create').onclick = async () => {
     const topic = $('#nt').value.trim(); if (!topic) { $('#nt').focus(); toast('Scrieți tema'); return; }
     const c = genCode(), token = genToken();
-    await store.set('sessions/' + c, { meta: { topic, desc: $('#nd').value.trim(), teams: +$('#nn').value, showAuthors: $('#na').checked, phase: 'idei', token, created: Date.now() } });
+    await store.set('sessions/' + c, { meta: { topic, desc: $('#nd').value.trim(), minutes: +$('#nm').value, showAuthors: $('#na').checked, phase: 'pregatire', token, created: Date.now() } });
     mine.push({ code: c, token, title: topic, at: Date.now() }); lsSet('af_my', mine);
     location.href = `?s=${c}&admin=${token}`;
   };
 }
 
 // ================= COMPONENTE =================
+const caseHTML = (compact) => `<div class="card case"><div class="small muted">Studiu de caz · cod ${code}</div><h1 style="margin-top:4px">${esc(S.meta.topic)}</h1>${S.meta.desc && !compact ? `<p style="white-space:pre-line">${esc(S.meta.desc)}</p>` : ''}</div>`;
+
 function noteHTML(x, opts = {}) {
   const mine = x.by === clientId, isNew = !firstPaint && !seen.has(x.id); seen.add(x.id);
   const canEdit = opts.editable && (mine || isAdmin);
@@ -318,47 +350,42 @@ function noteHTML(x, opts = {}) {
 
 function bindNoteActions(root) {
   $$('[data-edit]', root).forEach(b => b.onclick = e => { e.stopPropagation(); const x = S.ideas[b.dataset.edit]; const t = prompt('Modificați ideea:', x.text); if (t != null && t.trim()) store.update(P('ideas/' + b.dataset.edit), { text: t.trim().slice(0, 140) }); });
-  $$('[data-del]', root).forEach(b => b.onclick = e => { e.stopPropagation(); if (confirm('Ștergeți ideea?')) { const upd = { ['ideas/' + b.dataset.del]: null }; teamIds().forEach(t => upd['boards/' + t + '/place/' + b.dataset.del] = null); store.update(P(''), upd); } });
-}
-
-function wallHTML(editable) {
-  const ideas = ideasList();
-  return ideas.length ? `<div class="wall">${ideas.map(x => noteHTML(x, { editable })).join('')}</div>` : '<div class="empty">Încă nu există idei. Primele bilețele vor apărea aici în timp real.</div>';
+  $$('[data-del]', root).forEach(b => b.onclick = e => { e.stopPropagation(); if (confirm('Ștergeți ideea?')) store.update(P(''), { ['ideas/' + b.dataset.del]: null, ['boards/' + BOARD + '/place/' + b.dataset.del]: null }); });
 }
 
 function composeHTML() {
-  return `<div class="card"><form id="cf" class="compose"><div style="flex:1"><label for="newIdea">Ideea ta</label><textarea id="newIdea" maxlength="140" placeholder="Scrie o idee și apasă Enter"></textarea></div><button class="primary" style="height:52px">Adaugă</button></form>
-    <p class="small muted" style="margin:6px 0 0">Enter = trimite · Shift+Enter = rând nou · max. 140 de caractere</p></div>`;
+  return `<form id="cf" class="compose"><div style="flex:1"><label for="newIdea">Ideea ta</label><textarea id="newIdea" maxlength="140" placeholder="ex. Transport între aeroport și Romexpo pentru invitații străini"></textarea></div><button class="primary" style="height:52px">Adaugă</button></form>
+    <p class="small muted" style="margin:6px 0 0">Enter = trimite · Shift+Enter = rând nou · câte o idee pe bilețel</p>`;
 }
 function bindCompose() {
   const f = $('#cf'); if (!f) return;
-  const send = () => { const t = $('#newIdea').value.trim(); if (!t) return; const pn = $('#pname'); const name = isAdmin ? 'Formator' : ((pn && pn.value.trim()) || lsGet('af_name', '') || ''); if (pn) lsSet('af_name', name); store.set(P('ideas/' + store.newKey()), { text: t.slice(0, 140), by: clientId, name, at: Date.now() }); $('#newIdea').value = ''; $('#newIdea').focus(); };
+  const send = () => { const t = $('#newIdea').value.trim(); if (!t) return; const name = isAdmin ? 'Formator' : ((me() && me().name) || ''); store.set(P('ideas/' + store.newKey()), { text: t.slice(0, 140), by: clientId, name, at: Date.now() }); $('#newIdea').value = ''; $('#newIdea').focus(); };
   f.onsubmit = e => { e.preventDefault(); send(); };
   $('#newIdea').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
 }
 
-function boardHTML(team, editable) {
-  const ideas = ideasList(), groups = groupsOf(team), place = placeOf(team), gids = new Set(groups.map(g => g.id));
-  const inG = gid => ideas.filter(x => place[x.id] === gid);
-  const unplaced = ideas.filter(x => !gids.has(place[x.id]));
+function boardHTML(editable) {
+  const ideas = ideasList(), gs = groups(), pl = place(), gids = new Set(gs.map(g => g.id));
+  const inG = gid => ideas.filter(x => pl[x.id] === gid);
+  const unplaced = ideas.filter(x => !gids.has(pl[x.id]));
   const nopt = { drag: editable, editable: false };
-  return `<div class="board ${editable ? '' : 'ro'}" data-team="${team}">
+  return `<div class="board ${editable ? '' : 'ro'}">
     <div class="col unplaced" data-drop="__none"><h3>Neclasificate <span class="muted small">${unplaced.length}</span></h3><div class="notes">${unplaced.map(x => noteHTML(x, nopt)).join('') || '<p class="small muted" style="text-align:center">Toate ideile au fost grupate ✓</p>'}</div></div>
     <div class="groups">
-      ${groups.map((g, i) => `<div class="group" data-drop="${g.id}" style="--gc:${g.color || COLORS[i % COLORS.length]}">
-        <div class="gh">${editable ? `<input type="text" id="gt_${team}_${g.id}" data-gt="${g.id}" value="${esc(g.title || '')}" placeholder="Titlul grupului…">` : `<b style="padding:4px 6px;flex:1">${esc(g.title || 'Fără titlu')}</b>`}<span class="cnt">${inG(g.id).length}</span>${editable ? `<button class="ghost small" data-delg="${g.id}" title="Desființează grupul (ideile revin la neclasificate)">✕</button>` : ''}</div>
+      ${gs.map((g, i) => `<div class="group" data-drop="${g.id}" style="--gc:${g.color || COLORS[i % COLORS.length]}">
+        <div class="gh">${editable ? `<input type="text" id="gt_${g.id}" data-gt="${g.id}" value="${esc(g.title || '')}" placeholder="Numele categoriei…">` : `<b style="padding:4px 6px;flex:1">${esc(g.title || 'Fără titlu')}</b>`}<span class="cnt">${inG(g.id).length}</span>${editable ? `<button class="ghost small" data-delg="${g.id}" title="Desființează categoria (ideile revin la neclasificate)">✕</button>` : ''}</div>
         <div class="notes">${inG(g.id).map(x => noteHTML(x, nopt)).join('')}</div></div>`).join('')}
-      ${editable ? `<div class="newgroup" data-drop="__new"><span>＋ Grup nou</span><span class="small" style="font-weight:400">sau trageți o idee aici</span></div>` : ''}
-      ${!groups.length && !editable ? '<div class="empty">Această echipă nu a creat încă grupuri.</div>' : ''}
+      ${editable ? `<div class="newgroup" data-drop="__new"><span>＋ Categorie nouă</span><span class="small" style="font-weight:400">clic aici sau trageți o idee aici</span></div>` : ''}
+      ${!gs.length && !editable ? '<div class="empty">Nu a fost creată nicio categorie.</div>' : ''}
     </div></div>`;
 }
 
-function bindBoard(root, team) {
+function bindBoard(root) {
   const board = $('.board', root); if (!board || board.classList.contains('ro')) return;
-  const bp = 'boards/' + team;
+  const bp = 'boards/' + BOARD;
   const moveTo = (id, target) => {
     if (target === '__none') store.remove(P(bp + '/place/' + id));
-    else if (target === '__new') newGroup(team, id);
+    else if (target === '__new') newGroup(id);
     else store.set(P(bp + '/place/' + id), target);
   };
   $$('.note', board).forEach(n => {
@@ -370,127 +397,125 @@ function bindBoard(root, team) {
     z.addEventListener('dragover', e => { e.preventDefault(); z.classList.add('over'); });
     z.addEventListener('dragleave', e => { if (!z.contains(e.relatedTarget)) z.classList.remove('over'); });
     z.addEventListener('drop', e => { e.preventDefault(); z.classList.remove('over'); const id = e.dataTransfer.getData('text/plain'); dragging = false; if (id) moveTo(id, z.dataset.drop); });
-    // alternativă fără drag: clic pe idee, apoi clic pe grup
-    z.addEventListener('click', e => { if (e.target.closest('input,button')) return; if (selected) { const id = selected; selected = null; moveTo(id, z.dataset.drop); } else if (z.dataset.drop === '__new') newGroup(team); });
+    z.addEventListener('click', e => { if (e.target.closest('input,button')) return; if (selected) { const id = selected; selected = null; moveTo(id, z.dataset.drop); } else if (z.dataset.drop === '__new') newGroup(); });
   });
   $$('[data-gt]', board).forEach(inp => inp.oninput = debounce(() => store.update(P(bp + '/groups/' + inp.dataset.gt), { title: inp.value.trim().slice(0, 60) }), 500));
-  $$('[data-delg]', board).forEach(b => b.onclick = e => { e.stopPropagation(); const gid = b.dataset.delg, place = placeOf(team), upd = { ['groups/' + gid]: null };
-    Object.entries(place).forEach(([iid, g]) => { if (g === gid) upd['place/' + iid] = null; }); store.update(P(bp), upd); });
+  $$('[data-delg]', board).forEach(b => b.onclick = e => { e.stopPropagation(); const gid = b.dataset.delg, upd = { ['groups/' + gid]: null };
+    Object.entries(place()).forEach(([iid, g]) => { if (g === gid) upd['place/' + iid] = null; }); store.update(P(bp), upd); });
 }
 
-function newGroup(team, ideaId) {
-  const gs = groupsOf(team), gid = store.newKey(), order = gs.length ? Math.max(...gs.map(g => g.order || 0)) + 1 : 1;
+function newGroup(ideaId) {
+  const gs = groups(), gid = store.newKey(), order = gs.length ? Math.max(...gs.map(g => g.order || 0)) + 1 : 1;
   const upd = { ['groups/' + gid]: { title: '', order, color: COLORS[gs.length % COLORS.length] } };
   if (ideaId) upd['place/' + ideaId] = gid;
-  store.update(P('boards/' + team), upd).then(() => setTimeout(() => { const i = document.getElementById('gt_' + team + '_' + gid); if (i) i.focus(); }, 50));
+  store.update(P('boards/' + BOARD), upd).then(() => setTimeout(() => { const i = document.getElementById('gt_' + gid); if (i) i.focus(); }, 60));
 }
 
-function compareHTML() {
-  const ideas = S.ideas || {};
-  return `<div class="cmp">${teamIds().map(t => { const gs = groupsOf(t), place = placeOf(t), gids = new Set(gs.map(g => g.id));
-    const unpl = Object.keys(ideas).filter(id => !gids.has(place[id])).length;
-    return `<div class="card"><h3>${teamName(t)}</h3><div class="small muted">${gs.length} grupuri · ${unpl} idei neclasificate</div>
-      ${gs.map((g, i) => { const its = Object.keys(ideas).filter(id => place[id] === g.id); return `<div class="g" style="--gc:${g.color || COLORS[i % COLORS.length]}"><b>${esc(g.title || 'Fără titlu')} <span class="muted small">(${its.length})</span></b><ul style="margin:4px 0 0;padding-left:18px">${its.map(id => `<li>${esc(ideas[id].text)}</li>`).join('')}</ul></div>`; }).join('') || '<p class="muted small">Niciun grup.</p>'}</div>`; }).join('')}</div>`;
-}
+const chipsHTML = () => `<div class="members">${members().map(m => `<span>${esc(m.name)}</span>`).join('') || '<span class="muted">nimeni încă</span>'}</div>`;
+const groupingHint = `<div class="hint" style="margin-bottom:14px"><b>Lucrăm toți împreună, pe aceeași tablă.</b> 1) Trageți bilețelele care „seamănă” în aceeași categorie (sau: clic pe bilețel → clic pe categorie). 2) Creați categorii noi cu „＋ Categorie nouă”. 3) Dați fiecărei categorii un nume care exprimă ideea comună. Toată lumea vede modificările în timp real.</div>`;
 
 // ================= PARTICIPANT =================
 function renderParticipant() {
-  const m = S.meta, ph = m.phase || 'idei';
-  const nIdeas = Object.keys(S.ideas || {}).length;
-  let name = lsGet('af_name', '');
-  let h = `<div class="card" style="margin-bottom:16px"><div class="row" style="justify-content:space-between;align-items:flex-start">
-      <div style="flex:1;min-width:260px"><div class="small muted">${PHASES.find(p => p[0] === ph)[1]} · ${nIdeas} idei</div><h1 style="margin-top:4px">${esc(m.topic)}</h1>${m.desc && ph === 'idei' ? `<p class="muted">${esc(m.desc)}</p>` : ''}</div>
-      <div style="width:220px"><label for="pname">Numele tău</label><input type="text" id="pname" value="${esc(name)}" placeholder="ex. Ana P."></div></div></div>`;
-
-  if (ph === 'idei') {
-    h += composeHTML() + `<div style="margin-top:16px">${wallHTML(true)}</div>`;
+  const ph = phase(), m = me();
+  if (!m) {
+    $('#app').innerHTML = `<div style="max-width:760px;margin:0 auto" class="stack">${caseHTML(false)}
+      <div class="card"><form id="jf" class="row" style="align-items:flex-end"><div style="flex:1;min-width:220px"><label for="jn">Numele dumneavoastră</label><input type="text" id="jn" maxlength="40" placeholder="ex. Ana Popescu" value="${esc(lsGet('af_name', ''))}" autofocus></div><button class="primary">Intru în comitet</button></form></div></div>`;
+    $('#jf').onsubmit = e => { e.preventDefault(); const n = $('#jn').value.trim(); if (!n) { $('#jn').focus(); return; } lsSet('af_name', n); store.set(P('members/' + clientId), { name: n.slice(0, 40), at: Date.now() }); };
+    return;
+  }
+  const ideas = ideasList(), mineI = ideas.filter(x => x.by === clientId);
+  let h = '';
+  if (ph === 'pregatire') {
+    h = `<div style="max-width:760px;margin:0 auto" class="stack">${caseHTML(false)}
+      <div class="card" style="text-align:center;padding:28px"><h2>Bun venit în comitetul de organizare, ${esc(m.name)}!</h2><p class="muted">Așteptăm ca formatorul să pornească cronometrul. Veți avea ${S.meta.minutes || 5} minute să notați, individual, ideile dumneavoastră.</p><div style="margin-top:10px">${chipsHTML()}</div></div></div>`;
+    $('#app').innerHTML = h;
+  } else if (ph === 'idei') {
+    h = `<div style="max-width:860px;margin:0 auto" class="stack">${caseHTML(false)}
+      <div class="card"><div class="row" style="justify-content:space-between;margin-bottom:10px"><div><div class="small muted">Timp rămas</div><div class="countdown">${fmtTime(remaining())}</div></div>
+        <div class="small muted" style="text-align:right">Ideile celorlalți devin vizibile la final.<br>Grupul a scris până acum <b>${ideas.length}</b> idei.</div></div>
+        ${composeHTML()}</div>
+      <div class="card"><h3>Ideile mele (${mineI.length})</h3>${mineI.length ? `<div class="wall">${mineI.map(x => noteHTML(x, { editable: true })).join('')}</div>` : '<div class="empty" style="border-color:#f2c94c;background:#fffbea;color:#8a5a00">Nu ați scris încă nicio idee. Fiecare membru al comitetului scrie cel puțin una.</div>'}</div></div>`;
     $('#app').innerHTML = h; bindCompose(); bindNoteActions($('#app'));
   } else if (ph === 'grupare') {
-    const t = myTeam();
-    if (!t) {
-      const ms = members();
-      h += `<div class="card stack"><h2>Alegeți echipa</h2><p class="muted">Alegeți echipa din care faceți parte (aceeași ca în camera de lucru).</p>
-        <div class="teampick">${teamIds().map(tt => { const mm = ms.filter(x => x.team === tt); return `<button data-team="${tt}"><b>${teamName(tt)}</b><span class="small muted">${mm.length ? mm.map(x => esc(x.name || '?')).join(', ') : 'niciun membru încă'}</span></button>`; }).join('')}</div></div>`;
-      $('#app').innerHTML = h;
-      $$('[data-team]').forEach(b => b.onclick = () => store.set(P('members/' + clientId), { name: $('#pname').value.trim() || lsGet('af_name', ''), team: b.dataset.team, at: Date.now() }));
-    } else {
-      const mm = members().filter(x => x.team === t);
-      h += `<div class="row" style="margin-bottom:12px;justify-content:space-between"><div class="row"><h2 style="margin:0">${teamName(t)}</h2><div class="members">${mm.map(x => `<span>${esc(x.name || '?')}</span>`).join('')}</div></div>
-          ${(m.teams || 1) > 1 ? '<button id="chg" class="small">Schimb echipa</button>' : ''}</div>
-        <div class="hint" style="margin-bottom:14px"><b>Cum lucrăm:</b> 1) Mutați în tăcere bilețelele care „seamănă” în același grup (trageți-le cu mouse-ul sau clic pe bilețel → clic pe grup). 2) Discutați și dați fiecărui grup un titlu care exprimă ideea comună. Toți membrii echipei văd modificările în timp real.</div>
-        <div id="bd">${boardHTML(t, true)}</div>`;
-      $('#app').innerHTML = h; bindBoard($('#bd'), t);
-      const c = $('#chg'); if (c) c.onclick = () => store.remove(P('members/' + clientId));
-    }
+    h = `${caseHTML(true)}<div class="row" style="margin:14px 0 10px;justify-content:space-between"><div class="row"><b>Comitetul:</b>${chipsHTML()}</div><span class="muted small">${ideas.length} idei</span></div>${groupingHint}<div id="bd">${boardHTML(true)}</div>`;
+    $('#app').innerHTML = h; bindBoard($('#bd'));
   } else {
-    const t = viewTeam || myTeam() || 't1';
-    h += `${(m.teams || 1) > 1 ? `<div class="tabs">${teamIds().map(tt => `<button data-vt="${tt}" class="${tt === t ? 'on' : ''}">${teamName(tt)}${tt === myTeam() ? ' (echipa mea)' : ''}</button>`).join('')}<button data-vt="cmp" class="${t === 'cmp' ? 'on' : ''}">Comparație</button></div>` : ''}
-      <div id="bd">${t === 'cmp' ? compareHTML() : boardHTML(t, false)}</div>`;
+    h = `${caseHTML(true)}<div class="hint" style="margin:14px 0">Diagrama afinității finală a comitetului.</div><div id="bd">${boardHTML(false)}</div>`;
     $('#app').innerHTML = h;
-    $$('[data-vt]').forEach(b => b.onclick = () => { viewTeam = b.dataset.vt; render(); });
   }
-  const pn = $('#pname');
-  pn.oninput = debounce(() => { const v = pn.value.trim(); lsSet('af_name', v); if (myMember() && myMember().name !== v) store.update(P('members/' + clientId), { name: v }); }, 500);
 }
 
 // ================= ADMIN =================
 function renderAdmin() {
-  const m = S.meta, ph = m.phase || 'idei', ms = members(), link = baseUrl() + '?s=' + code;
-  const nIdeas = Object.keys(S.ideas || {}).length;
-  let h = `<div class="card" style="margin-bottom:16px"><div class="row" style="justify-content:space-between;align-items:flex-start">
+  const m = S.meta, ph = phase(), ms = members(), ideas = ideasList(), link = baseUrl() + '?s=' + code;
+  const per = id => ideas.filter(x => x.by === id).length;
+  let h = `${store.mode === 'demo' ? `<div class="card" style="margin-bottom:12px;border-color:#f2c94c;background:#fffbea;padding:12px 16px"><b>Mod demo:</b> fără configurația Firebase, participanții de pe alte calculatoare nu se pot conecta. Testați deschizând linkul participantului în alte taburi.</div>` : ''}
+  <div class="card" style="margin-bottom:16px"><div class="row" style="justify-content:space-between;align-items:flex-start">
       <div><div class="small muted">Cod sesiune</div><div class="codebox">${code}</div></div>
       <div style="flex:1;min-width:260px;max-width:520px"><div class="small muted">Link pentru participanți (îl puneți în chat)</div><div class="row"><div class="linkbox" style="flex:1">${esc(link)}</div><button id="copy">Copiază</button></div></div>
-      <div class="kpi row"><div class="badge" style="font-size:.9rem;padding:6px 12px">${nIdeas} idei</div><div class="badge" style="font-size:.9rem;padding:6px 12px">${ms.length} în echipe</div></div></div>
-    <div class="row" style="margin-top:14px;justify-content:space-between"><h2 style="margin:0;flex:1;min-width:240px">${esc(m.topic)}</h2>
+      <div class="row"><div class="badge" style="font-size:.9rem;padding:6px 12px">${ms.length} participanți</div><div class="badge" style="font-size:.9rem;padding:6px 12px">${ideas.length} idei</div></div></div>
+    <div class="row" style="margin-top:14px;justify-content:space-between"><h2 style="margin:0;flex:1;min-width:240px;font-size:1.05rem">${esc(m.topic)}</h2>
       <div class="stepper">${PHASES.map(([k, t], i) => `<button data-ph="${k}" class="${ph === k ? 'on' : ''}"><span class="n">${i + 1}</span>${t}</button>`).join('')}</div></div></div>
-  <div class="tabs">${[['idei', 'Idei'], ['echipe', 'Tablele echipelor'], ['cmp', 'Comparație'], ['set', 'Setări']].map(([k, t]) => `<button data-tab="${k}" class="${adminTab === k ? 'on' : ''}">${t}</button>`).join('')}</div>
-  <div id="tb"></div>`;
+  <div id="tb"></div>
+  <details class="card" style="margin-top:20px"><summary style="cursor:pointer;font-weight:650">Setări sesiune</summary><div class="stack" style="margin-top:12px;max-width:760px">
+      <div><label for="sT">Tema</label><input type="text" id="sT" value="${esc(m.topic)}"></div>
+      <div><label for="sD">Studiul de caz / indicații</label><textarea id="sD" rows="5">${esc(m.desc || '')}</textarea></div>
+      <div class="row"><div><label for="sM">Timp de scriere</label><select id="sM" style="width:auto">${[2, 3, 4, 5, 7, 10].map(n => `<option value="${n}" ${n === (m.minutes || 5) ? 'selected' : ''}>${n} minute</option>`).join('')}</select></div>
+        <label class="switch" style="margin-top:18px"><input type="checkbox" id="sA" ${m.showAuthors ? 'checked' : ''}> Afișez autorul pe bilețele</label></div>
+      <div class="row" style="border-top:1px solid var(--line);padding-top:14px"><button id="csv2">⬇ Export CSV</button><button class="danger" id="rstB">Golește categoriile</button><button class="danger" id="rstI">Șterge toate ideile</button><button class="danger" id="delS">Șterge sesiunea</button></div>
+      <p class="small muted">Link de administrare (păstrați-l): <span class="linkbox" style="display:block;margin-top:4px">${esc(location.href)}</span></p></div></details>`;
   $('#app').innerHTML = h;
   $('#copy').onclick = () => copyText(link);
-  $$('[data-ph]').forEach(b => b.onclick = () => { adminTab = b.dataset.ph === 'idei' ? 'idei' : b.dataset.ph === 'grupare' ? 'echipe' : 'cmp'; lsSet('af_tab', adminTab); store.update(P('meta'), { phase: b.dataset.ph }); render(); });
-  $$('[data-tab]').forEach(b => b.onclick = () => { adminTab = b.dataset.tab; lsSet('af_tab', adminTab); render(); });
+  $$('[data-ph]').forEach(b => b.onclick = () => {
+    const k = b.dataset.ph;
+    if (k === 'idei') { if (ph !== 'idei' && !confirm(`Porniți cronometrul de ${m.minutes || 5} minute?`)) return; if (ph !== 'idei') startTimer(); return; }
+    if (k === 'pregatire' && !confirm('Reveniți la pregătire? Cronometrul se resetează.')) return;
+    store.update(P('meta'), { phase: k, ...(k === 'pregatire' ? { timerEnd: null } : {}), ...(k === 'grupare' || k === 'final' ? { timerEnd: Math.min(m.timerEnd || 0, store.now()) || null } : {}) });
+  });
   const tb = $('#tb');
 
-  if (adminTab === 'idei') {
-    tb.innerHTML = `${ph !== 'idei' ? '<div class="hint" style="margin-bottom:12px">Participanții nu mai pot adăuga idei (etapa de generare s-a încheiat). Dumneavoastră puteți în continuare adăuga, modifica sau șterge idei.</div>' : ''}${composeHTML()}<div style="margin-top:16px">${wallHTML(true)}</div>`;
-    bindCompose(); bindNoteActions(tb);
-  } else if (adminTab === 'echipe') {
-    const tids = teamIds(); if (!tids.includes(adminTeam)) adminTeam = tids[0];
-    const mm = ms.filter(x => x.team === adminTeam);
-    tb.innerHTML = `<div class="tabs" style="margin-bottom:10px">${tids.map(t => `<button data-at="${t}" class="${t === adminTeam ? 'on' : ''}">${teamName(t)} <span class="muted small">(${ms.filter(x => x.team === t).length})</span></button>`).join('')}</div>
-      ${(m.teams || 1) > 1 ? `<div class="row small" style="margin-bottom:12px"><b>Membri:</b> ${mm.length ? mm.map(x => `<span class="members"><span>${esc(x.name || '?')} <select data-mv="${x.id}" style="width:auto;padding:0 4px;border:none;font-size:.78rem">${tids.map(t => `<option value="${t}" ${t === x.team ? 'selected' : ''}>${teamName(t)}</option>`).join('')}<option value="">— scoate</option></select></span></span>`).join(' ') : '<span class="muted">niciun membru încă</span>'}</div>` : ''}
-      <p class="small muted">Puteți interveni pe tablă ca moderator: aceleași acțiuni ca participanții.</p>
-      <div id="bd">${boardHTML(adminTeam, true)}</div>`;
-    $$('[data-at]').forEach(b => b.onclick = () => { adminTeam = b.dataset.at; render(); });
-    $$('[data-mv]').forEach(s => s.onchange = () => s.value ? store.update(P('members/' + s.dataset.mv), { team: s.value }) : store.remove(P('members/' + s.dataset.mv)));
-    bindBoard($('#bd'), adminTeam);
-  } else if (adminTab === 'cmp') {
-    tb.innerHTML = `<div class="row" style="justify-content:space-between;margin-bottom:12px"><p class="muted small" style="margin:0">Aceleași idei, grupate de echipe diferite. Bun punct de plecare pentru discuție: unde ați ajuns la aceleași categorii și unde nu?</p><button id="csv">⬇ Export CSV (Excel)</button></div>${compareHTML()}`;
-    $('#csv').onclick = exportCSV;
-  } else if (adminTab === 'set') {
-    tb.innerHTML = `<div class="card stack" style="max-width:720px">
-      <div><label for="sT">Tema</label><input type="text" id="sT" value="${esc(m.topic)}"></div>
-      <div><label for="sD">Indicații</label><textarea id="sD">${esc(m.desc || '')}</textarea></div>
-      <div class="row"><div style="flex:1"><label for="sN">Număr de echipe</label><select id="sN">${[1, 2, 3, 4, 5, 6, 7, 8].map(n => `<option value="${n}" ${n === (m.teams || 1) ? 'selected' : ''}>${n === 1 ? '1 – tot grupul' : n + ' echipe'}</option>`).join('')}</select></div>
-        <label class="switch" style="margin-top:18px"><input type="checkbox" id="sA" ${m.showAuthors ? 'checked' : ''}> Afișez autorul ideilor participanților</label></div>
-      <div class="row" style="border-top:1px solid var(--line);padding-top:14px"><button id="csv2">⬇ Export CSV</button><button class="danger" id="rstB">Golește tablele echipelor</button><button class="danger" id="rstI">Șterge toate ideile</button><button class="danger" id="delS">Șterge sesiunea</button></div>
-      <p class="small muted">Link de administrare (păstrați-l): <span class="linkbox" style="display:block;margin-top:4px">${esc(location.href)}</span></p></div>`;
-    $('#sT').oninput = debounce(e => store.update(P('meta'), { topic: e.target.value.trim() }), 600);
-    $('#sD').oninput = debounce(e => store.update(P('meta'), { desc: e.target.value.trim() }), 600);
-    $('#sN').onchange = e => store.update(P('meta'), { teams: +e.target.value });
-    $('#sA').onchange = e => store.update(P('meta'), { showAuthors: e.target.checked });
-    $('#csv2').onclick = exportCSV;
-    $('#rstB').onclick = () => { if (confirm('Goliți grupările tuturor echipelor? Ideile rămân.')) store.remove(P('boards')); };
-    $('#rstI').onclick = () => { if (confirm('Ștergeți TOATE ideile și grupările?')) store.update(P(''), { ideas: null, boards: null }); };
-    $('#delS').onclick = () => { if (confirm('Ștergeți definitiv sesiunea?')) { store.remove(P('')); lsSet('af_my', lsGet('af_my', []).filter(x => x.code !== code)); location.href = '?prof'; } };
+  if (ph === 'pregatire') {
+    tb.innerHTML = `<div class="grid2"><div class="card stack"><h2>Pasul 1 · Participanții intră în sesiune</h2><p class="muted">Puneți linkul în chat. Fiecare își scrie numele și intră „în comitet”.</p>${chipsHTML()}
+        <button class="primary" id="start" style="align-self:flex-start;font-size:1.05rem;padding:12px 20px">▶ Pornește cronometrul (${m.minutes || 5} min)</button></div>
+      ${caseHTML(false)}</div>`;
+    $('#start').onclick = startTimer;
+  } else if (ph === 'idei') {
+    tb.innerHTML = `<div class="grid2"><div class="card stack"><div class="small muted">Timp rămas</div><div class="countdown" style="font-size:3.4rem">${fmtTime(remaining())}</div>
+        <div class="row"><button id="plus">+1 minut</button><button class="primary" id="stop">Oprește și afișează toate ideile</button></div>
+        <p class="small muted">La expirarea timpului, ideile apar automat la toți și începe gruparea.</p></div>
+      <div class="card"><h3>Cine a scris (${ms.filter(x => per(x.id) > 0).length} din ${ms.length})</h3><table><tbody>${ms.map(x => `<tr><td>${esc(x.name)}</td><td class="num">${per(x.id) ? `<b>${per(x.id)}</b> idei ✓` : '<span style="color:var(--warn);font-weight:600">nicio idee încă</span>'}</td></tr>`).join('') || '<tr><td class="muted">Niciun participant.</td></tr>'}</tbody></table></div></div>
+      <div class="card" style="margin-top:16px"><div class="row" style="justify-content:space-between"><h3 style="margin:0">Ideile primite (${ideas.length})</h3><label class="switch"><input type="checkbox" id="showT" ${showTexts ? 'checked' : ''}> Arată textul (doar pe ecranul meu – atenție dacă partajați ecranul)</label></div>
+        <div style="margin-top:12px">${showTexts ? `<div class="wall">${ideas.map(x => noteHTML(x, { editable: true })).join('')}</div>` : `<div class="wall">${ideas.map(() => '<div class="note" style="background:#eceaf6;border-color:#dcd8ee;min-height:40px"></div>').join('')}</div>`}</div></div>`;
+    $('#plus').onclick = () => store.update(P('meta'), { timerEnd: Math.max(m.timerEnd, store.now()) + 60000 });
+    $('#stop').onclick = () => store.update(P('meta'), { phase: 'grupare', timerEnd: store.now() });
+    $('#showT').onchange = e => { showTexts = e.target.checked; render(); };
+    bindNoteActions(tb);
+  } else if (ph === 'grupare') {
+    tb.innerHTML = `<div class="row" style="margin-bottom:10px;justify-content:space-between"><div class="row"><b>Comitetul:</b>${chipsHTML()}</div><button class="primary" id="fin">Încheie gruparea → Rezultat</button></div>${groupingHint}<div id="bd">${boardHTML(true)}</div>`;
+    $('#fin').onclick = () => store.update(P('meta'), { phase: 'final' });
+    bindBoard($('#bd'));
+  } else {
+    tb.innerHTML = `<div class="row" style="margin-bottom:10px;justify-content:space-between"><p class="muted" style="margin:0">Diagrama finală. Participanții o văd doar în citire; o puteți încă modifica de aici.</p><div class="row"><button id="back">← Înapoi la grupare</button><button class="primary" id="csv">⬇ Export CSV (Excel)</button></div></div><div id="bd">${boardHTML(true)}</div>`;
+    $('#back').onclick = () => store.update(P('meta'), { phase: 'grupare' });
+    $('#csv').onclick = exportCSV; bindBoard($('#bd'));
   }
+
+  $('#sT').oninput = debounce(e => store.update(P('meta'), { topic: e.target.value.trim() }), 600);
+  $('#sD').oninput = debounce(e => store.update(P('meta'), { desc: e.target.value.trim() }), 600);
+  $('#sM').onchange = e => store.update(P('meta'), { minutes: +e.target.value });
+  $('#sA').onchange = e => store.update(P('meta'), { showAuthors: e.target.checked });
+  $('#csv2').onclick = exportCSV;
+  $('#rstB').onclick = () => { if (confirm('Goliți toate categoriile? Ideile rămân.')) store.remove(P('boards')); };
+  $('#rstI').onclick = () => { if (confirm('Ștergeți TOATE ideile și categoriile?')) store.update(P(''), { ideas: null, boards: null }); };
+  $('#delS').onclick = () => { if (confirm('Ștergeți definitiv sesiunea?')) { store.remove(P('')); lsSet('af_my', lsGet('af_my', []).filter(x => x.code !== code)); location.href = '?prof'; } };
 }
 
+function startTimer() { store.update(P('meta'), { phase: 'idei', timerEnd: store.now() + (S.meta.minutes || 5) * 60000 }); }
+
 function exportCSV() {
-  const ideas = S.ideas || {}, rows = [['Echipa', 'Grup', 'Idee', 'Autor']];
-  teamIds().forEach(t => { const gs = groupsOf(t), place = placeOf(t), gids = new Set(gs.map(g => g.id));
-    gs.forEach(g => Object.keys(ideas).filter(id => place[id] === g.id).forEach(id => rows.push([teamName(t), g.title || 'Fără titlu', ideas[id].text, ideas[id].name || ''])));
-    Object.keys(ideas).filter(id => !gids.has(place[id])).forEach(id => rows.push([teamName(t), '(neclasificată)', ideas[id].text, ideas[id].name || ''])); });
+  const ideas = S.ideas || {}, gs = groups(), pl = place(), gids = new Set(gs.map(g => g.id)), rows = [['Categorie', 'Idee', 'Autor']];
+  gs.forEach(g => Object.keys(ideas).filter(id => pl[id] === g.id).forEach(id => rows.push([g.title || 'Fără titlu', ideas[id].text, ideas[id].name || ''])));
+  Object.keys(ideas).filter(id => !gids.has(pl[id])).forEach(id => rows.push(['(neclasificată)', ideas[id].text, ideas[id].name || '']));
   download(`afinitate_${code}.csv`, toCSV(rows));
 }
 </script>
