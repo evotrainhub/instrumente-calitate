@@ -1,0 +1,498 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Diagrama afinității – live</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<style>
+:root{
+  --bg:#f3f1ff; --panel:#ffffff; --ink:#1e1b3a; --muted:#625f80; --line:#e4e0f5;
+  --accent:#5b3df5; --accent2:#e5368f; --accent-ink:#ffffff; --accent-soft:#ece8ff; --warn:#d6334f; --warn-soft:#ffe4ea;
+  --grad:linear-gradient(120deg,#5b3df5 0%,#9b3cf0 50%,#e5368f 100%);
+  --radius:12px; --shadow:0 1px 2px rgba(60,40,140,.06),0 6px 20px rgba(60,40,140,.08);
+  --cM:#2563eb; --cP:#10b981; --cA:#f59e0b; --cI:#94a3b8; --cR:#ef4444; --cQ:#a855f7;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg) radial-gradient(1200px 500px at 100% -10%,#ffe3f1 0%,transparent 60%) no-repeat,radial-gradient(900px 500px at -10% 0%,#e3e0ff 0%,transparent 60%) no-repeat;background-color:var(--bg);color:var(--ink);font:15px/1.5 "Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+h1,h2,h3{line-height:1.2;margin:0 0 .4em;font-weight:650;letter-spacing:-.01em}
+h1{font-size:1.6rem} h2{font-size:1.25rem} h3{font-size:1.05rem}
+p{margin:.3em 0 .8em}
+a{color:var(--accent)}
+.wrap{max-width:1180px;margin:0 auto;padding:20px 16px 60px}
+.top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 16px;background:var(--grad);color:#fff;position:sticky;top:0;z-index:20;box-shadow:0 4px 18px rgba(91,61,245,.25)}
+.top .muted{color:#ffffffcc}
+.top .brand{font-weight:700;letter-spacing:-.01em;display:flex;align-items:center;gap:8px}
+.top .brand .dot{width:12px;height:12px;border-radius:4px;background:#fff;box-shadow:0 0 0 3px #ffffff55}
+.top .sp{flex:1}
+.badge{display:inline-flex;align-items:center;gap:6px;font-size:.78rem;padding:3px 9px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-weight:600}
+.badge.demo{background:#fff3c4;color:#8a5a00}
+.top .badge{background:#ffffff26;color:#fff}.top .badge.demo{background:#fff3c4;color:#8a5a00}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.stack>*+*{margin-top:12px}
+.muted{color:var(--muted)} .small{font-size:.85rem}
+label{font-weight:600;font-size:.88rem;display:block;margin-bottom:4px}
+input[type=text],textarea,select{width:100%;font:inherit;color:inherit;background:#fff;border:1px solid var(--line);border-radius:9px;padding:9px 11px;outline:none}
+input[type=text]:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+textarea{resize:vertical;min-height:70px}
+button,.btn{font:inherit;font-weight:600;border:1px solid var(--line);background:#fff;color:var(--ink);padding:8px 14px;border-radius:9px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;text-decoration:none;white-space:nowrap}
+button:hover{border-color:#c7c1b6}
+button.primary{background:var(--grad);border-color:transparent;color:var(--accent-ink);box-shadow:0 3px 10px rgba(155,60,240,.3)}
+button.primary:hover{filter:brightness(1.08)}
+button.danger{color:var(--warn)} button.danger:hover{border-color:var(--warn)}
+button.ghost{border-color:transparent;background:transparent;padding:6px 8px}
+button.ghost:hover{background:#0000000a}
+button:disabled{opacity:.45;cursor:not-allowed}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:16px;flex-wrap:wrap}
+.tabs button{border:none;border-bottom:2px solid transparent;border-radius:0;background:none;padding:10px 12px;color:var(--muted)}
+.tabs button.on{color:var(--accent);border-bottom:3px solid var(--accent2)}
+.codebox{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:1.9rem;font-weight:800;letter-spacing:.18em;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.linkbox{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.85rem;background:var(--bg);border:1px dashed var(--line);border-radius:8px;padding:8px 10px;word-break:break-all}
+table{border-collapse:collapse;width:100%}
+th,td{padding:7px 9px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font-size:.8rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:650}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+.scroll-x{overflow-x:auto}
+.empty{padding:28px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:var(--radius)}
+.switch{display:inline-flex;align-items:center;gap:8px;font-weight:600;font-size:.9rem;cursor:pointer;user-select:none}
+.switch input{width:18px;height:18px;accent-color:var(--accent)}
+#toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);opacity:0;background:var(--ink);color:#fff;padding:10px 16px;border-radius:10px;transition:.25s;pointer-events:none;z-index:99}
+#toast.show{opacity:1;transform:translateX(-50%)}
+.hero{max-width:560px;margin:8vh auto 0}
+.hero .card{padding:26px;border-top:5px solid transparent;border-image:var(--grad) 1;border-radius:0 0 var(--radius) var(--radius)}
+.pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.78rem;font-weight:700;color:#fff}
+@media (max-width:640px){ .codebox{font-size:1.5rem} h1{font-size:1.35rem} }
+
+.wrap{max-width:1400px}
+.stepper{display:flex;gap:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff}
+.stepper button{border:none;border-radius:0;padding:9px 14px;border-right:1px solid var(--line);color:var(--muted)}
+.stepper button:last-child{border-right:none}
+.stepper button.on{background:var(--grad);color:#fff}
+.stepper button .n{display:inline-flex;width:20px;height:20px;border-radius:50%;align-items:center;justify-content:center;font-size:.75rem;background:#0000000d;margin-right:4px}
+.stepper button.on .n{background:#ffffff33}
+.wall{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px}
+.note{background:#fff3a3;border:1px solid #f2d94a;border-radius:8px;transform:rotate(-.4deg);padding:10px 12px 8px;box-shadow:0 1px 2px #0000000f,0 3px 8px #0000000a;font-size:.93rem;line-height:1.35;position:relative;word-wrap:break-word;min-height:58px}
+.note.mine{box-shadow:0 0 0 2px #5b3df5,0 3px 8px #0000001a}
+.note:nth-child(even){transform:rotate(.5deg)}
+.note .by{font-size:.72rem;color:#00000080;margin-top:6px;display:flex;gap:4px;align-items:center}
+.note .acts{position:absolute;top:2px;right:2px;display:none;gap:0}
+.note:hover .acts{display:flex}
+.note .acts button{padding:2px 6px;font-size:.78rem;border:none;background:transparent;color:#00000099}
+.note .acts button:hover{background:#00000010}
+.note.new{animation:pop .35s ease}
+@keyframes pop{from{transform:scale(.85);opacity:0}to{transform:none;opacity:1}}
+.compose{display:flex;gap:10px;align-items:flex-end}
+.compose textarea{min-height:52px;flex:1}
+.board{display:grid;grid-template-columns:270px 1fr;gap:16px;align-items:start}
+.col{background:#e9e5fb;border-radius:10px;padding:10px;min-height:120px;transition:background .15s,box-shadow .15s}
+.col.over{background:#ddd5ff;box-shadow:inset 0 0 0 2px var(--accent)}
+.col .notes{display:flex;flex-direction:column;gap:8px;min-height:40px}
+.col.unplaced{position:sticky;top:70px;max-height:calc(100vh - 90px);overflow:auto}
+.col.unplaced h3{display:flex;justify-content:space-between}
+.groups{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px;align-items:start}
+.group{background:#fff;border:1px solid var(--line);border-radius:10px;padding:0 0 10px;box-shadow:var(--shadow)}
+.group .gh{display:flex;align-items:center;gap:6px;padding:8px 8px 8px 10px;border-radius:10px 10px 0 0;background:var(--gc,#5b3df5);color:#fff}
+.group .gh input{color:#fff}.group .gh input::placeholder{color:#ffffffb0}.group .gh input:focus{color:var(--ink)}.group .gh .cnt{color:#fff!important;background:#ffffff33;border-radius:99px;padding:1px 8px!important}.group .gh button{color:#fff}
+.group{border-top:none!important;border-color:color-mix(in srgb,var(--gc) 30%,#fff)!important}
+.group .gh input{flex:1;min-width:0;border:none;background:transparent;font-weight:700;padding:4px 6px;font-size:.95rem}
+.group .gh input:focus{background:#fff;box-shadow:0 0 0 2px var(--accent-soft)}
+.group .gh .cnt{font-size:.75rem;color:var(--muted);font-weight:700;padding:0 4px}
+.group .notes{padding:10px 10px 0;display:flex;flex-direction:column;gap:8px;min-height:60px}
+.group.over{box-shadow:inset 0 0 0 2px var(--accent),var(--shadow)}
+.newgroup{border:2px dashed #b9a2f7;color:var(--accent)!important;border-radius:10px;min-height:110px;display:flex;flex-direction:column;gap:2px;align-items:center;justify-content:center;color:var(--muted);font-weight:600;cursor:pointer;text-align:center;padding:12px;background:transparent}
+.newgroup.over{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.board .note{cursor:grab;min-height:0}
+.board .note.sel{outline:3px solid var(--accent);outline-offset:1px}
+.board .note.dragging{opacity:.4}
+.board.ro .note{cursor:default}
+.teampick{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px}
+.teampick button{flex-direction:column;align-items:flex-start;padding:16px;gap:4px;white-space:normal;text-align:left}
+.teampick button b{font-size:1.1rem}
+.cmp{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+.cmp .g{margin:10px 0;padding-left:10px;border-left:4px solid var(--gc)}
+.cmp .g b{display:block}
+.cmp .g li{font-size:.88rem}
+.hint{background:linear-gradient(120deg,#ece8ff,#ffe4f1);border-radius:10px;padding:10px 14px;font-size:.9rem}
+.members{display:flex;gap:6px;flex-wrap:wrap}
+.members span{font-size:.78rem;background:#fff;border:1px solid var(--line);border-radius:999px;padding:2px 9px}
+@media (max-width:760px){.board{grid-template-columns:1fr}.col.unplaced{position:static;max-height:none}}
+</style>
+</head>
+<body>
+<div class="top">
+  <div class="brand"><span class="dot"></span>Diagrama afinității</div>
+  <span id="sessTitle" class="muted small"></span>
+  <span class="sp"></span>
+  <span id="modeBadge"></span>
+</div>
+<main class="wrap" id="app"></main>
+
+<script>
+// ================= STOCARE: Firebase Realtime Database sau mod demo local =================
+// Pentru utilizare reală cu participanții: lipiți aici configurația proiectului Firebase
+// (Firebase Console → Project settings → Your apps → Web app → firebaseConfig).
+// Lăsat null → MOD DEMO: funcționează doar între taburile aceluiași browser (pentru testare).
+const FIREBASE_CONFIG = null;
+/* Exemplu:
+const FIREBASE_CONFIG = {
+  apiKey: "AIza...",
+  authDomain: "proiectul-meu.firebaseapp.com",
+  databaseURL: "https://proiectul-meu-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "proiectul-meu",
+  appId: "1:...:web:..."
+};
+*/
+
+function createStore(prefix) {
+  if (FIREBASE_CONFIG && window.firebase && firebase.database) {
+    if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+    const db = firebase.database();
+    const P = p => prefix + '/' + p;
+    return {
+      mode: 'firebase',
+      on(path, cb) { const r = db.ref(P(path)); const h = s => cb(s.val()); r.on('value', h); return () => r.off('value', h); },
+      get(path) { return db.ref(P(path)).get().then(s => s.val()); },
+      set(path, v) { return db.ref(P(path)).set(v); },
+      update(path, obj) { return db.ref(P(path)).update(obj); },
+      remove(path) { return db.ref(P(path)).remove(); },
+      newKey() { return db.ref().push().key; },
+      onConnection(cb) { db.ref('.info/connected').on('value', s => cb(!!s.val())); }
+    };
+  }
+  // ---------- mod demo: localStorage + evenimentul 'storage' între taburi ----------
+  const KEY = 'demo_db_' + prefix;
+  const listeners = new Set();
+  const read = () => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { return {}; } };
+  const parts = p => p.split('/').filter(Boolean);
+  const getAt = (obj, p) => parts(p).reduce((o, k) => (o == null ? undefined : o[k]), obj);
+  const prune = o => { if (o && typeof o === 'object') { for (const k of Object.keys(o)) { if (o[k] === null || o[k] === undefined) delete o[k]; else { prune(o[k]); if (o[k] && typeof o[k] === 'object' && !Object.keys(o[k]).length) delete o[k]; } } } return o; };
+  const setAt = (obj, p, v) => {
+    const ks = parts(p); if (!ks.length) return v;
+    let o = obj; for (let i = 0; i < ks.length - 1; i++) { if (typeof o[ks[i]] !== 'object' || o[ks[i]] === null) o[ks[i]] = {}; o = o[ks[i]]; }
+    o[ks[ks.length - 1]] = (v === undefined ? null : JSON.parse(JSON.stringify(v)));
+    return obj;
+  };
+  const write = db => { try { localStorage.setItem(KEY, JSON.stringify(prune(db))); } catch (e) { alert('Stocare locală indisponibilă.'); } notify(); };
+  const notify = () => { const db = read(); listeners.forEach(l => { const v = getAt(db, l.path); l.cb(v === undefined ? null : JSON.parse(JSON.stringify(v))); }); };
+  window.addEventListener('storage', e => { if (e.key === KEY) notify(); });
+  return {
+    mode: 'demo',
+    on(path, cb) { const l = { path, cb }; listeners.add(l); setTimeout(() => { const v = getAt(read(), path); cb(v === undefined ? null : v); }, 0); return () => listeners.delete(l); },
+    get(path) { const v = getAt(read(), path); return Promise.resolve(v === undefined ? null : v); },
+    set(path, v) { write(setAt(read(), path, v)); return Promise.resolve(); },
+    update(path, obj) { let db = read(); for (const k of Object.keys(obj)) db = setAt(db, path + '/' + k, obj[k]); write(db); return Promise.resolve(); },
+    remove(path) { write(setAt(read(), path, null)); return Promise.resolve(); },
+    newKey() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); },
+    onConnection(cb) { cb(true); }
+  };
+}
+
+// ================= utilitare comune =================
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const $ = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
+const genCode = () => { const a = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s = ''; for (let i = 0; i < 5; i++) s += a[Math.floor(Math.random() * a.length)]; return s; };
+const genToken = () => Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+const lsGet = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v ?? d; } catch (e) { return d; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { } };
+const clientId = (() => { let id = lsGet('client_id', null); if (!id) { id = genToken().slice(0, 14); lsSet('client_id', id); } return id; })();
+const params = new URLSearchParams(location.search);
+const baseUrl = () => location.origin + location.pathname;
+
+// Păstrează focusul și textul tastat când o zonă e redesenată din cauza unei actualizări live
+function preserveFocus(fn) {
+  const a = document.activeElement;
+  const id = a && a.id && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA') ? a.id : null;
+  const val = id ? a.value : null, s = id ? a.selectionStart : null, e = id ? a.selectionEnd : null;
+  fn();
+  if (id) { const n = document.getElementById(id); if (n) { n.value = val; n.focus(); try { n.setSelectionRange(s, e); } catch (_) { } } }
+}
+
+function toast(msg) {
+  let t = $('#toast'); if (!t) { t = document.createElement('div'); t.id = 'toast'; document.body.appendChild(t); }
+  t.textContent = msg; t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2200);
+}
+function copyText(txt) {
+  (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).then(() => toast('Copiat în clipboard')).catch(() => { prompt('Copiați linkul:', txt); });
+}
+function download(name, text, type = 'text/csv;charset=utf-8') {
+  const b = new Blob(['﻿' + text], { type }); const u = URL.createObjectURL(b);
+  const a = document.createElement('a'); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 1000);
+}
+const csvCell = v => { const s = String(v ?? ''); return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+const toCSV = rows => rows.map(r => r.map(csvCell).join(';')).join('\n');
+const debounce = (fn, ms) => { let h; return (...a) => { clearTimeout(h); h = setTimeout(() => fn(...a), ms); }; };
+
+
+const COLORS = ['#5b3df5', '#e5368f', '#f59e0b', '#10b981', '#0ea5e9', '#ef4444', '#a855f7', '#14b8a6', '#f97316', '#2563eb'];
+// culori vii pentru bilețele, alese după autor
+const NOTE_COLORS = [['#fff3a3', '#f2d94a'], ['#ffd1e8', '#f59ac8'], ['#c9f7e1', '#7fdcb4'], ['#cfe8ff', '#8cc4f7'], ['#ffdcc2', '#f7ab78'], ['#e4d9ff', '#b9a2f7']];
+const noteColor = by => { let h = 0; for (const ch of String(by || '')) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return NOTE_COLORS[h % NOTE_COLORS.length]; };
+const PHASES = [['idei', 'Generare idei'], ['grupare', 'Grupare pe afinități'], ['final', 'Rezultat']];
+const store = createStore('afinitate');
+const code = (params.get('s') || '').toUpperCase().trim();
+const adminToken = params.get('admin');
+let S = null, isAdmin = false;
+let adminTab = lsGet('af_tab', 'idei'), adminTeam = 't1';
+let viewTeam = null;          // participant: echipa vizualizată în etapa finală
+let dragging = false, pending = false, selected = null;
+const seen = new Set(); let firstPaint = true;
+
+$('#modeBadge').innerHTML = store.mode === 'demo'
+  ? '<span class="badge demo" title="Fără Firebase: datele se sincronizează doar între taburile acestui browser">Mod demo local</span>'
+  : '<span class="badge" id="conn">● conectat</span>';
+if (store.mode === 'firebase') store.onConnection(ok => { const c = $('#conn'); if (c) { c.textContent = ok ? '● conectat' : '○ reconectare…'; c.className = ok ? 'badge' : 'badge demo'; } });
+
+const P = p => 'sessions/' + code + (p ? '/' + p : '');
+const ideasList = () => Object.entries(S.ideas || {}).map(([id, x]) => ({ id, ...x })).sort((a, b) => (a.at || 0) - (b.at || 0));
+const teamIds = () => Array.from({ length: Math.max(1, S.meta.teams || 1) }, (_, i) => 't' + (i + 1));
+const teamName = t => (S.meta.teams || 1) > 1 ? 'Echipa ' + t.slice(1) : 'Tot grupul';
+const members = () => Object.entries(S.members || {}).map(([id, m]) => ({ id, ...m }));
+const myMember = () => (S.members || {})[clientId];
+const myTeam = () => (S.meta.teams || 1) <= 1 ? 't1' : (myMember() && myMember().team);
+const groupsOf = t => Object.entries(((S.boards || {})[t] || {}).groups || {}).map(([id, g]) => ({ id, ...g })).sort((a, b) => (a.order || 0) - (b.order || 0));
+const placeOf = t => (((S.boards || {})[t] || {}).place) || {};
+
+function render() {
+  if (dragging) { pending = true; return; }
+  preserveFocus(() => isAdmin ? renderAdmin() : renderParticipant());
+  firstPaint = false;
+}
+
+// ================= RUTARE =================
+if (params.has('prof')) renderDashboard();
+else if (code) {
+  store.on(P(''), val => {
+    S = val;
+    if (!S || !S.meta) { $('#app').innerHTML = `<div class="hero"><div class="card"><h2>Sesiune inexistentă</h2><p class="muted">Codul <b>${esc(code)}</b> nu corespunde niciunei sesiuni.</p><a class="btn" href="${baseUrl()}">Înapoi</a></div></div>`; return; }
+    isAdmin = !!adminToken && adminToken === S.meta.token;
+    $('#sessTitle').textContent = S.meta.topic || '';
+    document.title = (S.meta.topic || 'Afinitate') + ' – Diagrama afinității';
+    render();
+  });
+} else renderLanding();
+
+function renderLanding() {
+  $('#app').innerHTML = `<div class="hero"><div class="card stack">
+    <h1>Diagrama afinității</h1><p class="muted">Introduceți codul sesiunii primit de la formator.</p>
+    <form id="f" class="row"><input type="text" id="c" placeholder="ex. K7M2Q" maxlength="5" style="flex:1;text-transform:uppercase;letter-spacing:.15em;font-weight:700" autofocus><button class="primary">Intră</button></form>
+    <p class="small muted" style="margin-top:22px">Sunteți formator? <a href="?prof">Zona formatorului →</a></p></div></div>`;
+  $('#f').onsubmit = e => { e.preventDefault(); const c = $('#c').value.trim().toUpperCase(); if (c) location.href = '?s=' + encodeURIComponent(c); };
+}
+
+function renderDashboard() {
+  const mine = lsGet('af_my', []);
+  $('#app').innerHTML = `<div class="grid2">
+    <div class="card stack"><h2>Sesiune nouă</h2>
+      <div><label for="nt">Tema / întrebarea de lucru</label><input type="text" id="nt" placeholder="ex. De ce nu sunt respectate procedurile SMC în organizație?"></div>
+      <div><label for="nd">Indicații pentru participanți (opțional)</label><textarea id="nd">Scrieți câte o idee pe bilețel: scurt, concret, maximum 1–2 rânduri. Puteți adăuga oricâte idei.</textarea></div>
+      <div class="row"><div style="flex:1"><label for="nn">Număr de echipe la grupare</label><select id="nn">${[1, 2, 3, 4, 5, 6, 7, 8].map(n => `<option value="${n}" ${n === 3 ? 'selected' : ''}>${n === 1 ? '1 – tot grupul pe aceeași tablă' : n + ' echipe'}</option>`).join('')}</select></div>
+      <label class="switch" style="margin-top:18px"><input type="checkbox" id="na"> Afișez autorul ideilor</label></div>
+      <button class="primary" id="create">Creează sesiunea</button></div>
+    <div class="card"><h2>Sesiunile mele</h2>
+      ${mine.length ? `<table><tbody>${mine.slice().reverse().map(m => `<tr><td><b>${esc(m.title)}</b><div class="small muted">${new Date(m.at).toLocaleString('ro-RO')}</div></td><td class="num"><span class="codebox" style="font-size:1rem">${esc(m.code)}</span></td><td class="num"><a class="btn" href="?s=${m.code}&admin=${m.token}">Deschide</a></td></tr>`).join('')}</tbody></table>` : '<div class="empty">Nicio sesiune încă pe acest browser.</div>'}
+      <p class="small muted" style="margin-top:12px">Linkul de administrare (cu <code>admin=…</code>) este cheia dumneavoastră – salvați-l dacă lucrați de pe alt calculator.</p></div></div>`;
+  $('#create').onclick = async () => {
+    const topic = $('#nt').value.trim(); if (!topic) { $('#nt').focus(); toast('Scrieți tema'); return; }
+    const c = genCode(), token = genToken();
+    await store.set('sessions/' + c, { meta: { topic, desc: $('#nd').value.trim(), teams: +$('#nn').value, showAuthors: $('#na').checked, phase: 'idei', token, created: Date.now() } });
+    mine.push({ code: c, token, title: topic, at: Date.now() }); lsSet('af_my', mine);
+    location.href = `?s=${c}&admin=${token}`;
+  };
+}
+
+// ================= COMPONENTE =================
+function noteHTML(x, opts = {}) {
+  const mine = x.by === clientId, isNew = !firstPaint && !seen.has(x.id); seen.add(x.id);
+  const canEdit = opts.editable && (mine || isAdmin);
+  const showBy = (S.meta.showAuthors || isAdmin) && x.name;
+  const [nb, nl] = noteColor(x.by);
+  return `<div class="note ${mine ? 'mine' : ''} ${isNew ? 'new' : ''} ${selected === x.id ? 'sel' : ''}" data-id="${x.id}" style="background:${nb};border-color:${nl}" ${opts.drag ? 'draggable="true"' : ''}>
+    ${esc(x.text)}${showBy ? `<div class="by">— ${esc(x.name)}</div>` : ''}
+    ${canEdit ? `<div class="acts"><button data-edit="${x.id}" title="Modifică">✎</button><button data-del="${x.id}" title="Șterge">✕</button></div>` : ''}</div>`;
+}
+
+function bindNoteActions(root) {
+  $$('[data-edit]', root).forEach(b => b.onclick = e => { e.stopPropagation(); const x = S.ideas[b.dataset.edit]; const t = prompt('Modificați ideea:', x.text); if (t != null && t.trim()) store.update(P('ideas/' + b.dataset.edit), { text: t.trim().slice(0, 140) }); });
+  $$('[data-del]', root).forEach(b => b.onclick = e => { e.stopPropagation(); if (confirm('Ștergeți ideea?')) { const upd = { ['ideas/' + b.dataset.del]: null }; teamIds().forEach(t => upd['boards/' + t + '/place/' + b.dataset.del] = null); store.update(P(''), upd); } });
+}
+
+function wallHTML(editable) {
+  const ideas = ideasList();
+  return ideas.length ? `<div class="wall">${ideas.map(x => noteHTML(x, { editable })).join('')}</div>` : '<div class="empty">Încă nu există idei. Primele bilețele vor apărea aici în timp real.</div>';
+}
+
+function composeHTML() {
+  return `<div class="card"><form id="cf" class="compose"><div style="flex:1"><label for="newIdea">Ideea ta</label><textarea id="newIdea" maxlength="140" placeholder="Scrie o idee și apasă Enter"></textarea></div><button class="primary" style="height:52px">Adaugă</button></form>
+    <p class="small muted" style="margin:6px 0 0">Enter = trimite · Shift+Enter = rând nou · max. 140 de caractere</p></div>`;
+}
+function bindCompose() {
+  const f = $('#cf'); if (!f) return;
+  const send = () => { const t = $('#newIdea').value.trim(); if (!t) return; const pn = $('#pname'); const name = isAdmin ? 'Formator' : ((pn && pn.value.trim()) || lsGet('af_name', '') || ''); if (pn) lsSet('af_name', name); store.set(P('ideas/' + store.newKey()), { text: t.slice(0, 140), by: clientId, name, at: Date.now() }); $('#newIdea').value = ''; $('#newIdea').focus(); };
+  f.onsubmit = e => { e.preventDefault(); send(); };
+  $('#newIdea').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
+}
+
+function boardHTML(team, editable) {
+  const ideas = ideasList(), groups = groupsOf(team), place = placeOf(team), gids = new Set(groups.map(g => g.id));
+  const inG = gid => ideas.filter(x => place[x.id] === gid);
+  const unplaced = ideas.filter(x => !gids.has(place[x.id]));
+  const nopt = { drag: editable, editable: false };
+  return `<div class="board ${editable ? '' : 'ro'}" data-team="${team}">
+    <div class="col unplaced" data-drop="__none"><h3>Neclasificate <span class="muted small">${unplaced.length}</span></h3><div class="notes">${unplaced.map(x => noteHTML(x, nopt)).join('') || '<p class="small muted" style="text-align:center">Toate ideile au fost grupate ✓</p>'}</div></div>
+    <div class="groups">
+      ${groups.map((g, i) => `<div class="group" data-drop="${g.id}" style="--gc:${g.color || COLORS[i % COLORS.length]}">
+        <div class="gh">${editable ? `<input type="text" id="gt_${team}_${g.id}" data-gt="${g.id}" value="${esc(g.title || '')}" placeholder="Titlul grupului…">` : `<b style="padding:4px 6px;flex:1">${esc(g.title || 'Fără titlu')}</b>`}<span class="cnt">${inG(g.id).length}</span>${editable ? `<button class="ghost small" data-delg="${g.id}" title="Desființează grupul (ideile revin la neclasificate)">✕</button>` : ''}</div>
+        <div class="notes">${inG(g.id).map(x => noteHTML(x, nopt)).join('')}</div></div>`).join('')}
+      ${editable ? `<div class="newgroup" data-drop="__new"><span>＋ Grup nou</span><span class="small" style="font-weight:400">sau trageți o idee aici</span></div>` : ''}
+      ${!groups.length && !editable ? '<div class="empty">Această echipă nu a creat încă grupuri.</div>' : ''}
+    </div></div>`;
+}
+
+function bindBoard(root, team) {
+  const board = $('.board', root); if (!board || board.classList.contains('ro')) return;
+  const bp = 'boards/' + team;
+  const moveTo = (id, target) => {
+    if (target === '__none') store.remove(P(bp + '/place/' + id));
+    else if (target === '__new') newGroup(team, id);
+    else store.set(P(bp + '/place/' + id), target);
+  };
+  $$('.note', board).forEach(n => {
+    n.addEventListener('dragstart', e => { dragging = true; e.dataTransfer.setData('text/plain', n.dataset.id); e.dataTransfer.effectAllowed = 'move'; setTimeout(() => n.classList.add('dragging'), 0); });
+    n.addEventListener('dragend', () => { n.classList.remove('dragging'); dragging = false; $$('.over').forEach(o => o.classList.remove('over')); if (pending) { pending = false; render(); } });
+    n.addEventListener('click', e => { e.stopPropagation(); selected = selected === n.dataset.id ? null : n.dataset.id; $$('.note.sel', board).forEach(x => x.classList.remove('sel')); if (selected) n.classList.add('sel'); });
+  });
+  $$('[data-drop]', board).forEach(z => {
+    z.addEventListener('dragover', e => { e.preventDefault(); z.classList.add('over'); });
+    z.addEventListener('dragleave', e => { if (!z.contains(e.relatedTarget)) z.classList.remove('over'); });
+    z.addEventListener('drop', e => { e.preventDefault(); z.classList.remove('over'); const id = e.dataTransfer.getData('text/plain'); dragging = false; if (id) moveTo(id, z.dataset.drop); });
+    // alternativă fără drag: clic pe idee, apoi clic pe grup
+    z.addEventListener('click', e => { if (e.target.closest('input,button')) return; if (selected) { const id = selected; selected = null; moveTo(id, z.dataset.drop); } else if (z.dataset.drop === '__new') newGroup(team); });
+  });
+  $$('[data-gt]', board).forEach(inp => inp.oninput = debounce(() => store.update(P(bp + '/groups/' + inp.dataset.gt), { title: inp.value.trim().slice(0, 60) }), 500));
+  $$('[data-delg]', board).forEach(b => b.onclick = e => { e.stopPropagation(); const gid = b.dataset.delg, place = placeOf(team), upd = { ['groups/' + gid]: null };
+    Object.entries(place).forEach(([iid, g]) => { if (g === gid) upd['place/' + iid] = null; }); store.update(P(bp), upd); });
+}
+
+function newGroup(team, ideaId) {
+  const gs = groupsOf(team), gid = store.newKey(), order = gs.length ? Math.max(...gs.map(g => g.order || 0)) + 1 : 1;
+  const upd = { ['groups/' + gid]: { title: '', order, color: COLORS[gs.length % COLORS.length] } };
+  if (ideaId) upd['place/' + ideaId] = gid;
+  store.update(P('boards/' + team), upd).then(() => setTimeout(() => { const i = document.getElementById('gt_' + team + '_' + gid); if (i) i.focus(); }, 50));
+}
+
+function compareHTML() {
+  const ideas = S.ideas || {};
+  return `<div class="cmp">${teamIds().map(t => { const gs = groupsOf(t), place = placeOf(t), gids = new Set(gs.map(g => g.id));
+    const unpl = Object.keys(ideas).filter(id => !gids.has(place[id])).length;
+    return `<div class="card"><h3>${teamName(t)}</h3><div class="small muted">${gs.length} grupuri · ${unpl} idei neclasificate</div>
+      ${gs.map((g, i) => { const its = Object.keys(ideas).filter(id => place[id] === g.id); return `<div class="g" style="--gc:${g.color || COLORS[i % COLORS.length]}"><b>${esc(g.title || 'Fără titlu')} <span class="muted small">(${its.length})</span></b><ul style="margin:4px 0 0;padding-left:18px">${its.map(id => `<li>${esc(ideas[id].text)}</li>`).join('')}</ul></div>`; }).join('') || '<p class="muted small">Niciun grup.</p>'}</div>`; }).join('')}</div>`;
+}
+
+// ================= PARTICIPANT =================
+function renderParticipant() {
+  const m = S.meta, ph = m.phase || 'idei';
+  const nIdeas = Object.keys(S.ideas || {}).length;
+  let name = lsGet('af_name', '');
+  let h = `<div class="card" style="margin-bottom:16px"><div class="row" style="justify-content:space-between;align-items:flex-start">
+      <div style="flex:1;min-width:260px"><div class="small muted">${PHASES.find(p => p[0] === ph)[1]} · ${nIdeas} idei</div><h1 style="margin-top:4px">${esc(m.topic)}</h1>${m.desc && ph === 'idei' ? `<p class="muted">${esc(m.desc)}</p>` : ''}</div>
+      <div style="width:220px"><label for="pname">Numele tău</label><input type="text" id="pname" value="${esc(name)}" placeholder="ex. Ana P."></div></div></div>`;
+
+  if (ph === 'idei') {
+    h += composeHTML() + `<div style="margin-top:16px">${wallHTML(true)}</div>`;
+    $('#app').innerHTML = h; bindCompose(); bindNoteActions($('#app'));
+  } else if (ph === 'grupare') {
+    const t = myTeam();
+    if (!t) {
+      const ms = members();
+      h += `<div class="card stack"><h2>Alegeți echipa</h2><p class="muted">Alegeți echipa din care faceți parte (aceeași ca în camera de lucru).</p>
+        <div class="teampick">${teamIds().map(tt => { const mm = ms.filter(x => x.team === tt); return `<button data-team="${tt}"><b>${teamName(tt)}</b><span class="small muted">${mm.length ? mm.map(x => esc(x.name || '?')).join(', ') : 'niciun membru încă'}</span></button>`; }).join('')}</div></div>`;
+      $('#app').innerHTML = h;
+      $$('[data-team]').forEach(b => b.onclick = () => store.set(P('members/' + clientId), { name: $('#pname').value.trim() || lsGet('af_name', ''), team: b.dataset.team, at: Date.now() }));
+    } else {
+      const mm = members().filter(x => x.team === t);
+      h += `<div class="row" style="margin-bottom:12px;justify-content:space-between"><div class="row"><h2 style="margin:0">${teamName(t)}</h2><div class="members">${mm.map(x => `<span>${esc(x.name || '?')}</span>`).join('')}</div></div>
+          ${(m.teams || 1) > 1 ? '<button id="chg" class="small">Schimb echipa</button>' : ''}</div>
+        <div class="hint" style="margin-bottom:14px"><b>Cum lucrăm:</b> 1) Mutați în tăcere bilețelele care „seamănă” în același grup (trageți-le cu mouse-ul sau clic pe bilețel → clic pe grup). 2) Discutați și dați fiecărui grup un titlu care exprimă ideea comună. Toți membrii echipei văd modificările în timp real.</div>
+        <div id="bd">${boardHTML(t, true)}</div>`;
+      $('#app').innerHTML = h; bindBoard($('#bd'), t);
+      const c = $('#chg'); if (c) c.onclick = () => store.remove(P('members/' + clientId));
+    }
+  } else {
+    const t = viewTeam || myTeam() || 't1';
+    h += `${(m.teams || 1) > 1 ? `<div class="tabs">${teamIds().map(tt => `<button data-vt="${tt}" class="${tt === t ? 'on' : ''}">${teamName(tt)}${tt === myTeam() ? ' (echipa mea)' : ''}</button>`).join('')}<button data-vt="cmp" class="${t === 'cmp' ? 'on' : ''}">Comparație</button></div>` : ''}
+      <div id="bd">${t === 'cmp' ? compareHTML() : boardHTML(t, false)}</div>`;
+    $('#app').innerHTML = h;
+    $$('[data-vt]').forEach(b => b.onclick = () => { viewTeam = b.dataset.vt; render(); });
+  }
+  const pn = $('#pname');
+  pn.oninput = debounce(() => { const v = pn.value.trim(); lsSet('af_name', v); if (myMember() && myMember().name !== v) store.update(P('members/' + clientId), { name: v }); }, 500);
+}
+
+// ================= ADMIN =================
+function renderAdmin() {
+  const m = S.meta, ph = m.phase || 'idei', ms = members(), link = baseUrl() + '?s=' + code;
+  const nIdeas = Object.keys(S.ideas || {}).length;
+  let h = `<div class="card" style="margin-bottom:16px"><div class="row" style="justify-content:space-between;align-items:flex-start">
+      <div><div class="small muted">Cod sesiune</div><div class="codebox">${code}</div></div>
+      <div style="flex:1;min-width:260px;max-width:520px"><div class="small muted">Link pentru participanți (îl puneți în chat)</div><div class="row"><div class="linkbox" style="flex:1">${esc(link)}</div><button id="copy">Copiază</button></div></div>
+      <div class="kpi row"><div class="badge" style="font-size:.9rem;padding:6px 12px">${nIdeas} idei</div><div class="badge" style="font-size:.9rem;padding:6px 12px">${ms.length} în echipe</div></div></div>
+    <div class="row" style="margin-top:14px;justify-content:space-between"><h2 style="margin:0;flex:1;min-width:240px">${esc(m.topic)}</h2>
+      <div class="stepper">${PHASES.map(([k, t], i) => `<button data-ph="${k}" class="${ph === k ? 'on' : ''}"><span class="n">${i + 1}</span>${t}</button>`).join('')}</div></div></div>
+  <div class="tabs">${[['idei', 'Idei'], ['echipe', 'Tablele echipelor'], ['cmp', 'Comparație'], ['set', 'Setări']].map(([k, t]) => `<button data-tab="${k}" class="${adminTab === k ? 'on' : ''}">${t}</button>`).join('')}</div>
+  <div id="tb"></div>`;
+  $('#app').innerHTML = h;
+  $('#copy').onclick = () => copyText(link);
+  $$('[data-ph]').forEach(b => b.onclick = () => { adminTab = b.dataset.ph === 'idei' ? 'idei' : b.dataset.ph === 'grupare' ? 'echipe' : 'cmp'; lsSet('af_tab', adminTab); store.update(P('meta'), { phase: b.dataset.ph }); render(); });
+  $$('[data-tab]').forEach(b => b.onclick = () => { adminTab = b.dataset.tab; lsSet('af_tab', adminTab); render(); });
+  const tb = $('#tb');
+
+  if (adminTab === 'idei') {
+    tb.innerHTML = `${ph !== 'idei' ? '<div class="hint" style="margin-bottom:12px">Participanții nu mai pot adăuga idei (etapa de generare s-a încheiat). Dumneavoastră puteți în continuare adăuga, modifica sau șterge idei.</div>' : ''}${composeHTML()}<div style="margin-top:16px">${wallHTML(true)}</div>`;
+    bindCompose(); bindNoteActions(tb);
+  } else if (adminTab === 'echipe') {
+    const tids = teamIds(); if (!tids.includes(adminTeam)) adminTeam = tids[0];
+    const mm = ms.filter(x => x.team === adminTeam);
+    tb.innerHTML = `<div class="tabs" style="margin-bottom:10px">${tids.map(t => `<button data-at="${t}" class="${t === adminTeam ? 'on' : ''}">${teamName(t)} <span class="muted small">(${ms.filter(x => x.team === t).length})</span></button>`).join('')}</div>
+      ${(m.teams || 1) > 1 ? `<div class="row small" style="margin-bottom:12px"><b>Membri:</b> ${mm.length ? mm.map(x => `<span class="members"><span>${esc(x.name || '?')} <select data-mv="${x.id}" style="width:auto;padding:0 4px;border:none;font-size:.78rem">${tids.map(t => `<option value="${t}" ${t === x.team ? 'selected' : ''}>${teamName(t)}</option>`).join('')}<option value="">— scoate</option></select></span></span>`).join(' ') : '<span class="muted">niciun membru încă</span>'}</div>` : ''}
+      <p class="small muted">Puteți interveni pe tablă ca moderator: aceleași acțiuni ca participanții.</p>
+      <div id="bd">${boardHTML(adminTeam, true)}</div>`;
+    $$('[data-at]').forEach(b => b.onclick = () => { adminTeam = b.dataset.at; render(); });
+    $$('[data-mv]').forEach(s => s.onchange = () => s.value ? store.update(P('members/' + s.dataset.mv), { team: s.value }) : store.remove(P('members/' + s.dataset.mv)));
+    bindBoard($('#bd'), adminTeam);
+  } else if (adminTab === 'cmp') {
+    tb.innerHTML = `<div class="row" style="justify-content:space-between;margin-bottom:12px"><p class="muted small" style="margin:0">Aceleași idei, grupate de echipe diferite. Bun punct de plecare pentru discuție: unde ați ajuns la aceleași categorii și unde nu?</p><button id="csv">⬇ Export CSV (Excel)</button></div>${compareHTML()}`;
+    $('#csv').onclick = exportCSV;
+  } else if (adminTab === 'set') {
+    tb.innerHTML = `<div class="card stack" style="max-width:720px">
+      <div><label for="sT">Tema</label><input type="text" id="sT" value="${esc(m.topic)}"></div>
+      <div><label for="sD">Indicații</label><textarea id="sD">${esc(m.desc || '')}</textarea></div>
+      <div class="row"><div style="flex:1"><label for="sN">Număr de echipe</label><select id="sN">${[1, 2, 3, 4, 5, 6, 7, 8].map(n => `<option value="${n}" ${n === (m.teams || 1) ? 'selected' : ''}>${n === 1 ? '1 – tot grupul' : n + ' echipe'}</option>`).join('')}</select></div>
+        <label class="switch" style="margin-top:18px"><input type="checkbox" id="sA" ${m.showAuthors ? 'checked' : ''}> Afișez autorul ideilor participanților</label></div>
+      <div class="row" style="border-top:1px solid var(--line);padding-top:14px"><button id="csv2">⬇ Export CSV</button><button class="danger" id="rstB">Golește tablele echipelor</button><button class="danger" id="rstI">Șterge toate ideile</button><button class="danger" id="delS">Șterge sesiunea</button></div>
+      <p class="small muted">Link de administrare (păstrați-l): <span class="linkbox" style="display:block;margin-top:4px">${esc(location.href)}</span></p></div>`;
+    $('#sT').oninput = debounce(e => store.update(P('meta'), { topic: e.target.value.trim() }), 600);
+    $('#sD').oninput = debounce(e => store.update(P('meta'), { desc: e.target.value.trim() }), 600);
+    $('#sN').onchange = e => store.update(P('meta'), { teams: +e.target.value });
+    $('#sA').onchange = e => store.update(P('meta'), { showAuthors: e.target.checked });
+    $('#csv2').onclick = exportCSV;
+    $('#rstB').onclick = () => { if (confirm('Goliți grupările tuturor echipelor? Ideile rămân.')) store.remove(P('boards')); };
+    $('#rstI').onclick = () => { if (confirm('Ștergeți TOATE ideile și grupările?')) store.update(P(''), { ideas: null, boards: null }); };
+    $('#delS').onclick = () => { if (confirm('Ștergeți definitiv sesiunea?')) { store.remove(P('')); lsSet('af_my', lsGet('af_my', []).filter(x => x.code !== code)); location.href = '?prof'; } };
+  }
+}
+
+function exportCSV() {
+  const ideas = S.ideas || {}, rows = [['Echipa', 'Grup', 'Idee', 'Autor']];
+  teamIds().forEach(t => { const gs = groupsOf(t), place = placeOf(t), gids = new Set(gs.map(g => g.id));
+    gs.forEach(g => Object.keys(ideas).filter(id => place[id] === g.id).forEach(id => rows.push([teamName(t), g.title || 'Fără titlu', ideas[id].text, ideas[id].name || ''])));
+    Object.keys(ideas).filter(id => !gids.has(place[id])).forEach(id => rows.push([teamName(t), '(neclasificată)', ideas[id].text, ideas[id].name || ''])); });
+  download(`afinitate_${code}.csv`, toCSV(rows));
+}
+</script>
+</body>
+</html>
